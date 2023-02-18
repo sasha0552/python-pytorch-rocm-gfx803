@@ -106,6 +106,9 @@ jobs:
           # Don't package -opt package
           sed 's/pkgname=("${pkgbase}" "python-pytorch-opt-rocm")/pkgname=("${pkgbase}")/g' -i python-pytorch-rocm/PKGBUILD
 
+          # Rename non-opt package function
+          sed 's/package_python-pytorch-rocm() {/package() {/g' -i python-pytorch-rocm/PKGBUILD
+
       - name: Change permissions to non-root user
         shell: bash
         run: |-
