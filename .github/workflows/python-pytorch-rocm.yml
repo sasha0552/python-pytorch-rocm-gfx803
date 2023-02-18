@@ -1,0 +1,131 @@
+name: Build python-pytorch-rocm
+
+on:
+  workflow_dispatch:
+    inputs:
+      force_build:
+        type: boolean
+        required: true
+        description: "Force build package"
+
+  schedule:
+    - cron: "0 0 * * *"
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v3
+
+      - name: Check that package updated
+        id: is_package_updated
+        shell: bash
+        run: |-
+            LAST_UPDATE=$(curl "https://archlinux.org/packages/community/x86_64/python-pytorch-rocm/json/" | jq -r ".last_update")
+
+            if [[ $(< "./last_update") != "$LAST_UPDATE" ]]; then
+                echo "$LAST_UPDATE" > "./last_update"
+                echo "package_updated=true" >> "$GITHUB_OUTPUT"
+            else
+                echo "package_updated=false" >> "$GITHUB_OUTPUT"
+            fi
+
+            echo "package_version=$LAST_UPDATE" >> "$GITHUB_OUTPUT"
+
+      - name: Commit last_update
+        if: steps.is_package_updated.outputs.package_updated == 'true'
+        shell: bash
+        run: |-
+          git config --local user.name "github-actions[bot]"
+          git config --local user.email "github-actions[bot]@users.noreply.github.com"
+
+          git commit -a -m "[ANY] Update last_update"
+
+      - name: Push changes
+        if: steps.is_package_updated.outputs.package_updated == 'true'
+        uses: ad-m/github-push-action@master
+
+    outputs:
+      package_updated: ${{ steps.is_package_updated.outputs.package_updated }}
+      package_version: ${{ steps.is_package_updated.outputs.package_version }}
+
+  build:
+    runs-on: self-hosted
+    needs: check
+    timeout-minutes: 1440
+    if: inputs.force_build == true || needs.check.outputs.package_updated == 'true'
+
+    container:
+      image: archlinux
+
+    steps:
+      - name: System cleanup
+        run: |-
+          rm -rf ./* || true
+          rm -rf ./.??* || true
+
+      - name: Upgrade system
+        shell: bash
+        run: |-
+          pacman --sync --refresh --sysupgrade --noconfirm
+
+      - name: Install required packages
+        shell: bash
+        run: |-
+          pacman --sync --noconfirm --needed base-devel git asp
+
+      - name: Create non-root user
+        shell: bash
+        run: |-
+          useradd user --groups wheel --create-home
+
+      - name: Configure sudoers
+        shell: bash
+        run: |-
+          echo "%wheel ALL=(ALL) NOPASSWD: ALL" >> /etc/sudoers
+
+      - name: Download package build files
+        shell: bash
+        run: |-
+          asp export python-pytorch-rocm
+
+      - name: Patch package build files
+        shell: bash
+        run: |-
+          sed 's/export PYTORCH_ROCM_ARCH=".*"/export PYTORCH_ROCM_ARCH="gfx803"/g' -i python-pytorch-rocm/PKGBUILD
+
+      - name: Change permissions to non-root user
+        shell: bash
+        run: |-
+          chown --recursive user:user python-pytorch-rocm/
+
+      - name: Build package
+        shell: bash
+        run: |-
+          cd python-pytorch-rocm/
+
+          su user --command "
+            makepkg --syncdeps --noconfirm
+          "
+
+      - name: Change permissions back to root user
+        shell: bash
+        run: |-
+          chown --recursive root:root python-pytorch-rocm/
+
+      - name: Upload artifacts
+        uses: actions/upload-artifact@v3
+        with:
+          path: |-
+            python-pytorch-rocm/*.pkg.tar.zst
+
+      - name: Upload artifacts to releases
+        uses: softprops/action-gh-release@v1
+        with:
+          tag_name: |-
+            ${{ needs.check.outputs.package_version }}
+
+          files: |-
+            python-pytorch-rocm/*.pkg.tar.zst
