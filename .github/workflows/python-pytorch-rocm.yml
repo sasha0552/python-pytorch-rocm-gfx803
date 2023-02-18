@@ -1,4 +1,4 @@
-name: Build python-pytorch-rocm
+name: Build python-pytorch-rocm-gfx803
 
 on:
   workflow_dispatch:
@@ -94,7 +94,17 @@ jobs:
       - name: Patch package build files
         shell: bash
         run: |-
+          # Rename package
+          sed 's/pkgbase="python-${_pkgname}-rocm"/pkgbase="python-${_pkgname}-rocm-gfx803"/g' -i python-pytorch-rocm/PKGBUILD
+
+          # Replace all architectures with gfx803
           sed 's/export PYTORCH_ROCM_ARCH=".*"/export PYTORCH_ROCM_ARCH="gfx803"/g' -i python-pytorch-rocm/PKGBUILD
+
+          # Don't build -opt package
+          sed '/python setup.py build || python setup.py build/a\  return' -i python-pytorch-rocm/PKGBUILD
+
+          # Don't package -opt package
+          sed 's/pkgname=("${pkgbase}" "python-pytorch-opt-rocm")/pkgname=("${pkgbase}")/g' -i python-pytorch-rocm/PKGBUILD
 
       - name: Change permissions to non-root user
         shell: bash
@@ -124,8 +134,8 @@ jobs:
       - name: Upload artifacts to releases
         uses: softprops/action-gh-release@v1
         with:
-          tag_name: |-
-            ${{ needs.check.outputs.package_version }}
+          name: |-
+            python-pytorch-rocm-gfx803 (${{ needs.check.outputs.package_version }})
 
           files: |-
             python-pytorch-rocm/*.pkg.tar.zst
