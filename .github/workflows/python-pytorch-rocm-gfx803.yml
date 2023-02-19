@@ -23,25 +23,25 @@ jobs:
         id: is_package_updated
         shell: bash
         run: |-
-            LAST_UPDATE=$(curl "https://archlinux.org/packages/community/x86_64/python-pytorch-rocm/json/" | jq -r ".last_update")
+            PACKAGE_VERSION=$(curl "https://archlinux.org/packages/community/x86_64/python-pytorch-rocm/json/" | jq -r '[ .pkgver, .pkgrel ] | join("-")')
 
-            if [[ $(< "./last_update") != "$LAST_UPDATE" ]]; then
-                echo "$LAST_UPDATE" > "./last_update"
-                echo "package_updated=true" >> "$GITHUB_OUTPUT"
+            if [[ $(< "./package_version") != "$PACKAGE_VERSION" ]]; then
+                echo "$PACKAGE_VERSION"                 >  "./package_version"
+
+                echo "package_updated=true"             >> "$GITHUB_OUTPUT"
+                echo "package_version=$PACKAGE_VERSION" >> "$GITHUB_OUTPUT"
             else
-                echo "package_updated=false" >> "$GITHUB_OUTPUT"
+                echo "package_updated=false"            >> "$GITHUB_OUTPUT"
             fi
 
-            echo "package_version=$LAST_UPDATE" >> "$GITHUB_OUTPUT"
-
-      - name: Commit last_update
+      - name: Commit package version
         if: steps.is_package_updated.outputs.package_updated == 'true'
         shell: bash
         run: |-
           git config --local user.name "github-actions[bot]"
           git config --local user.email "github-actions[bot]@users.noreply.github.com"
 
-          git commit -a -m "[ANY] Update last_update"
+          git commit -a -m "[ANY] Update package version"
 
       - name: Push changes
         if: steps.is_package_updated.outputs.package_updated == 'true'
