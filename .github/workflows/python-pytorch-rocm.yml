@@ -140,5 +140,8 @@ jobs:
           name: |-
             python-pytorch-rocm-gfx803 (${{ needs.check.outputs.package_version }})
 
+          tag_name: |-
+            ${{ needs.check.outputs.package_version }}
+
           files: |-
             python-pytorch-rocm/*.pkg.tar.zst
